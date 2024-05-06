@@ -7,7 +7,6 @@
 *.sql
 
 .config
-models/*/*.json
 temp
 
 # VS Code
