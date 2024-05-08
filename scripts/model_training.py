@@ -8,12 +8,11 @@ from sklearn.metrics import r2_score
 
 os.environ["KERAS_BACKEND"] = "tensorflow"
 
+#Getting our data
 tickers = 'GC=F'
 start = '2012-03-03'
 end = '2022-09-09'
-
 df = yf.download(tickers, start=start, end=end)
-
 df = df.reset_index()
 df = df.drop(['Date', 'Adj Close'], axis = 1)
 
@@ -21,7 +20,7 @@ ma100 = df.Close.rolling(100).mean()
 ma200 = df.Close.rolling(200).mean()
 
 #Selecting our features
-selected_features = ['Close']
+selected_features = ['Open', 'High', 'Low', 'Close', 'Volume']
 df = df[selected_features]
 
 #Splitting data into training and testing 70/30
@@ -35,6 +34,7 @@ scaler = MinMaxScaler(feature_range=(0,1))
 data_training_array = scaler.fit_transform(data_training)
 data_testing_array = scaler.fit_transform(data_testing)
 
+#Creating our sequences
 look_back = 100
 def create_sequences(data, look_back):
     x, y = [], []
@@ -48,7 +48,9 @@ def create_sequences(data, look_back):
 x_train, y_train = create_sequences(data_training_array, look_back)
 x_test, y_test = create_sequences(data_testing_array, look_back)
 
-def build_lstm_model(input_shape):
+#Building our LSTM model
+def build_lstm_model(x_train):
+    input_shape = (x_train.shape[1], x_train.shape[2])
     model = Sequential([
         layers.LSTM(units=40, return_sequences=True, input_shape=input_shape),
         layers.Dropout(0.2),
@@ -68,9 +70,7 @@ def build_lstm_model(input_shape):
 
     return model
 
-input_shape = (x_train.shape[1], x_train.shape[2])
-
-model = build_lstm_model(input_shape)
+model = build_lstm_model(x_train)
 
 def train_model(model, x_train, y_train, epochs):
     model.fit(
@@ -81,8 +81,8 @@ def train_model(model, x_train, y_train, epochs):
 
     return model
 
+#Training our model
 epochs = 5
-
 model = train_model(model, x_train, y_train, epochs)
 
 def evaluate_model(model, x_test, y_test):
@@ -92,11 +92,13 @@ def evaluate_model(model, x_test, y_test):
 
     return score, r2score
 
+#Evaluating our model
 score, r2score = evaluate_model(model, x_test, y_test)
 
 print('Score:', score)
 print('R2 Score:', r2score)
 
+#Saving our model
 def save_model(model, path, tickers):
     model.save(f'{path}/{tickers}.keras')
 
