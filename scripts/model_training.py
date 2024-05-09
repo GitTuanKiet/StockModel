@@ -1,107 +1,73 @@
-import os
-import numpy as np
-import pandas as pd
-from sklearn.preprocessing import MinMaxScaler
 from keras import layers, Sequential
-import yfinance as yf
-from sklearn.metrics import r2_score
 
-os.environ["KERAS_BACKEND"] = "tensorflow"
+from fn import logger
 
-#Getting our data
-tickers = 'GC=F'
-start = '2012-03-03'
-end = '2022-09-09'
-df = yf.download(tickers, start=start, end=end)
-df = df.reset_index()
-df = df.drop(['Date', 'Adj Close'], axis = 1)
+class ModelTraining:
+    def __init__(self, model_name, file_name):
+        self.model_name = model_name
+        self.file_name = file_name
+        self.path = f'models/{self.model_name}/{self.file_name}.keras'
 
-ma100 = df.Close.rolling(100).mean()
-ma200 = df.Close.rolling(200).mean()
+    def build(self):
+        pass
+    
 
-#Selecting our features
-selected_features = ['Open', 'High', 'Low', 'Close', 'Volume']
-df = df[selected_features]
+class ModelLSTMTraining(ModelTraining):
+    """_summary_
 
-#Splitting data into training and testing 70/30
-data_training = pd.DataFrame(df[0:int(len(df)*0.70)])
-data_testing = pd.DataFrame(df[int(len(df)*0.70): int(len(df))])
+    Args:
+        ModelTraining (_type_): _description_
+    """
+    def __init__(self, file_name):
+        super().__init__('lstm', file_name)
 
-#Scaling down our training data
-scaler = MinMaxScaler(feature_range=(0,1))
+    def build(
+        self,
+        train_array,
+        val_array,
+        epochs,
+        batch_size,
+    ):
+        """_summary_
 
-#converting to array, scaler.fit_transform auto gives us an array
-data_training_array = scaler.fit_transform(data_training)
-data_testing_array = scaler.fit_transform(data_testing)
+        Args:
+            train_array (_type_): _description_
+            val_array (_type_): _description_
+            epochs (_type_): _description_
+            batch_size (_type_): _description_
 
-#Creating our sequences
-look_back = 100
-def create_sequences(data, look_back):
-    x, y = [], []
+        Returns:
+            _type_: _description_
+        """
+        input_shape = (train_array.shape[1], train_array.shape[2])
+        model = Sequential()
 
-    for i in range(look_back, data.shape[0]):
-        x.append(data[i-look_back: i])
-        y.append(data[i, 0])
+        model.add(layers.Input(shape=input_shape))
+        model.add(layers.LSTM(units=40, return_sequences=True))
+        model.add(layers.Dropout(0.2))
+        model.add(layers.LSTM(units=60, return_sequences=True))
+        model.add(layers.Dropout(0.3))
+        model.add(layers.LSTM(units=80, return_sequences=True))
+        model.add(layers.Dropout(0.4))
+        model.add(layers.LSTM(units=120))
+        model.add(layers.Dropout(0.6))
+        model.add(layers.Dense(1))
 
-    return np.array(x), np.array(y)
+        model.compile(
+            optimizer='adam',
+            loss='mean_absolute_error'
+        )
 
-x_train, y_train = create_sequences(data_training_array, look_back)
-x_test, y_test = create_sequences(data_testing_array, look_back)
+        model.fit(
+            train_array,
+            val_array,
+            epochs=epochs,
+            batch_size=batch_size
+        )
 
-#Building our LSTM model
-def build_lstm_model(x_train):
-    input_shape = (x_train.shape[1], x_train.shape[2])
-    model = Sequential([
-        layers.LSTM(units=40, return_sequences=True, input_shape=input_shape),
-        layers.Dropout(0.2),
-        layers.LSTM(units=60, return_sequences=True),
-        layers.Dropout(0.3),
-        layers.LSTM(units=80, return_sequences=True),
-        layers.Dropout(0.4),
-        layers.LSTM(units=120),
-        layers.Dropout(0.5),
-        layers.Dense(1)
-    ])
+        model.save(self.path)
 
-    model.compile(
-        optimizer='adam',
-        loss='mean_squared_error'
-    )
-
-    return model
-
-model = build_lstm_model(x_train)
-
-def train_model(model, x_train, y_train, epochs):
-    model.fit(
-        x_train,
-        y_train,
-        epochs=epochs,
-    )
-
-    return model
-
-#Training our model
-epochs = 5
-model = train_model(model, x_train, y_train, epochs)
-
-def evaluate_model(model, x_test, y_test):
-    score = model.evaluate(x_test, y_test, verbose=0)
-
-    r2score = r2_score(y_test, model.predict(x_test))
-
-    return score, r2score
-
-#Evaluating our model
-score, r2score = evaluate_model(model, x_test, y_test)
-
-print('Score:', score)
-print('R2 Score:', r2score)
-
-#Saving our model
-def save_model(model, path, tickers):
-    model.save(f'{path}/{tickers}.keras')
-
-path = 'models/lstm'
-
-save_model(model, path, tickers)
+        self.model = model
+        
+        logger(f'Model saved at {self.path}', 'logs/model_training.log')
+        return self.path
